@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weather App</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.4s;
+      font-family: 'Segoe UI', sans-serif;
+    }
+
+    body.light { background: #60b4f5; }
+    body.dark  { background: #1a1f2e; }
+
+    .card {
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 28px 30px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+      transition: background 0.4s, color 0.4s;
+      position: relative;
+    }
+
+    body.dark .card {
+      background: #1e2538;
+      color: #e2e8f0;
+    }
+
+    .toggle-btn {
+      background: #3d5af1;
+      border: none;
+      border-radius: 10px;
+      padding: 6px 12px;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    .loc-btn {
+      background: #3d5af1;
+      border: none;
+      border-radius: 10px;
+      padding: 7px 14px;
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: background 0.2s;
+    }
+    .loc-btn:hover { background: #2a46d6; }
+    .loc-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+
+    .search-input {
+      width: 100%;
+      border: 1.5px solid #d1d5db;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 15px;
+      outline: none;
+      transition: border 0.2s, background 0.4s, color 0.4s;
+      background: #fff;
+      color: #111;
+    }
+    .search-input:focus { border-color: #3d5af1; }
+    body.dark .search-input {
+      background: #2a3352;
+      border-color: #3d5af1;
+      color: #e2e8f0;
+    }
+    body.dark .search-input::placeholder { color: #94a3b8; }
+
+    .search-btn {
+      background: #3d5af1;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 28px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .search-btn:hover { background: #2a46d6; }
+
+    .clear-btn {
+      background: #64748b;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 22px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .clear-btn:hover { background: #4b5563; }
+
+    .suggestions {
+      position: absolute;
+      left: 0; right: 0;
+      background: #fff;
+      border: 1.5px solid #d1d5db;
+      border-radius: 10px;
+      margin-top: 4px;
+      max-height: 180px;
+      overflow-y: auto;
+      z-index: 50;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    body.dark .suggestions {
+      background: #2a3352;
+      border-color: #3d5af1;
+    }
+    .suggestion-item {
+      padding: 10px 14px;
+      cursor: pointer;
+      font-size: 14px;
+      color: #333;
+      transition: background 0.15s;
+    }
+    body.dark .suggestion-item { color: #e2e8f0; }
+    .suggestion-item:hover { background: #eff6ff; }
+    body.dark .suggestion-item:hover { background: #3d5af1; color: #fff; }
+
+    .weather-result {
+      background: linear-gradient(135deg, #3d5af1 0%, #60b4f5 100%);
+      border-radius: 16px;
+      padding: 20px;
+      color: white;
+      text-align: center;
+    }
+
+    #map {
+      width: 100%;
+      height: 200px;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-top: 16px;
+    }
+
+    .spinner {
+      width: 36px; height: 36px;
+      border: 4px solid #3d5af1;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 10px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-msg {
+      color: #ef4444;
+      font-size: 14px;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    #datetime {
+      position: fixed;
+      top: 14px;
+      left: 16px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.85);
+      font-family: monospace;
+    }
+
+    .stat-divider {
+      border-top: 1px solid rgba(255,255,255,0.3);
+      padding-top: 12px;
+      margin-top: 16px;
+      display: flex;
+      justify-content: space-around;
+    }
+
+    .stat-item { text-align: center; }
+    .stat-icon { font-size: 18px; }
+    .stat-value { font-size: 13px; font-weight: 600; }
+    .stat-label { font-size: 11px; opacity: 0.8; }
+  </style>
+</head>
+<body class="light">
+  <div id="datetime"></div>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const API_KEY = "9d3626541e6b4fc59d4163305252508";
+
+    function WeatherApp() {
+      const [dark, setDark] = useState(false);
+      const [city, setCity] = useState("");
+      const [suggestions, setSuggestions] = useState([]);
+      const [weather, setWeather] = useState(null);
+      const [error, setError] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [locLoading, setLocLoading] = useState(false);
+
+      const mapRef = useRef(null);
+      const leafletMap = useRef(null);
+      const markerRef = useRef(null);
+      const inputRef = useRef(null);
+
+      useEffect(() => {
+        document.body.className = dark ? "dark" : "light";
+      }, [dark]);
+
+      useEffect(() => {
+        if (weather && mapRef.current && !leafletMap.current) {
+          leafletMap.current = L.map(mapRef.current).setView([20, 0], 2);
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "© OpenStreetMap contributors",
+          }).addTo(leafletMap.current);
+
+          const lat = weather.location.lat;
+          const lon = weather.location.lon;
+          leafletMap.current.setView([lat, lon], 8);
+          markerRef.current = L.marker([lat, lon])
+            .addTo(leafletMap.current)
+            .bindPopup(`${weather.location.name}, ${weather.location.country}`)
+            .openPopup();
+        }
+      }, [weather]);
+
+      async function fetchSuggestions(query) {
+        if (!query.trim()) { setSuggestions([]); return; }
+        try {
+          const res = await fetch(`https://api.weatherapi.com/v1/search.json?key=${API_KEY}&q=${query}`);
+          const data = await res.json();
+          setSuggestions(Array.isArray(data) ? data : []);
+        } catch { setSuggestions([]); }
+      }
+
+      async function getWeather(cityName) {
+        if (!cityName.trim()) return;
+        setLoading(true);
+        setError(null);
+        setSuggestions([]);
+
+        // Reset map instance so it reinits on new result
+        if (leafletMap.current) {
+          leafletMap.current.remove();
+          leafletMap.current = null;
+          markerRef.current = null;
+        }
+
+        try {
+          const res = await fetch(`https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${encodeURIComponent(cityName)}&aqi=no`);
+          const data = await res.json();
+          if (data.error) {
+            setError(data.error.message);
+            setWeather(null);
+          } else {
+            setWeather(data);
+            setCity(data.location.name);
+          }
+        } catch {
+          setError("Error fetching weather. Check your connection.");
+          setWeather(null);
+        }
+        setLoading(false);
+      }
+
+      async function useMyLocation() {
+        if (!navigator.geolocation) { setError("Geolocation not supported."); return; }
+        setLocLoading(true);
+        setError(null);
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            await getWeather(`${pos.coords.latitude},${pos.coords.longitude}`);
+            setLocLoading(false);
+          },
+          () => {
+            setError("Location access denied.");
+            setLocLoading(false);
+          }
+        );
+      }
+
+      function clearAll() {
+        setCity(""); setWeather(null); setError(null); setSuggestions([]);
+        if (leafletMap.current) {
+          leafletMap.current.remove();
+          leafletMap.current = null;
+          markerRef.current = null;
+        }
+        inputRef.current?.focus();
+      }
+
+      return (
+        <div className="card">
+          {/* Top bar */}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"18px" }}>
+            <button className="toggle-btn" onClick={() => setDark(!dark)} title="Toggle dark/light mode">
+              {dark ? "☀️" : "🌙"}&nbsp;/&nbsp;{dark ? "🌙" : "☀️"}
+            </button>
+            <button className="loc-btn" onClick={useMyLocation} disabled={locLoading}>
+              {locLoading ? "⏳" : "📍"}&nbsp;My Location
+            </button>
+          </div>
+
+          {/* Title */}
+          <h1 style={{ textAlign:"center", fontWeight:"700", fontSize:"22px", marginBottom:"20px", color: dark ? "#e2e8f0" : "#1a202c" }}>
+            Weather App
+          </h1>
+
+          {/* Search Input */}
+          <div style={{ position:"relative", marginBottom:"14px" }}>
+            <input
+              ref={inputRef}
+              type="text"
+              className="search-input"
+              placeholder="Enter city name..."
+              value={city}
+              onChange={(e) => { setCity(e.target.value); fetchSuggestions(e.target.value); }}
+              onKeyDown={(e) => { if (e.key === "Enter") getWeather(city); }}
+            />
+            {suggestions.length > 0 && (
+              <div className="suggestions">
+                {suggestions.map((s, i) => (
+                  <div
+                    key={i}
+                    className="suggestion-item"
+                    onClick={() => { getWeather(`${s.name}, ${s.country}`); setSuggestions([]); }}
+                  >
+                    {s.name}{s.region ? `, ${s.region}` : ""}, {s.country}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display:"flex", gap:"10px", justifyContent:"center", marginBottom:"20px" }}>
+            <button className="search-btn" onClick={() => getWeather(city)}>Search</button>
+            {(weather || error) && (
+              <button className="clear-btn" onClick={clearAll}>Clear</button>
+            )}
+          </div>
+
+          {/* Error */}
+          {error && !loading && (
+            <div className="error-msg">❌ {error}</div>
+          )}
+
+          {/* Loading */}
+          {loading && <div className="spinner"></div>}
+
+          {/* Weather Display */}
+          {weather && !loading && (
+            <>
+              <div className="weather-result">
+                <div style={{ fontSize:"12px", opacity:0.85, marginBottom:"4px" }}>
+                  🕒 {weather.location.localtime}
+                </div>
+                <div style={{ fontSize:"19px", fontWeight:"700" }}>
+                  {weather.location.name}, {weather.location.country}
+                </div>
+                <img
+                  src={`https:${weather.current.condition.icon}`}
+                  alt={weather.current.condition.text}
+                  style={{ margin:"8px auto", display:"block", width:"64px", height:"64px" }}
+                />
+                <div style={{ fontSize:"44px", fontWeight:"800", lineHeight:1 }}>
+                  {weather.current.temp_c}°C
+                </div>
+                <div style={{ fontSize:"15px", marginTop:"6px", opacity:0.9 }}>
+                  {weather.current.condition.text}
+                </div>
+                <div style={{ fontSize:"13px", marginTop:"3px", opacity:0.75 }}>
+                  Feels like {weather.current.feelslike_c}°C
+                </div>
+
+                <div className="stat-divider">
+                  <div className="stat-item">
+                    <div className="stat-icon">💨</div>
+                    <div className="stat-value">{weather.current.wind_kph} kph</div>
+                    <div className="stat-label">Wind</div>
+                  </div>
+                  <div className="stat-item">
+                    <div className="stat-icon">💧</div>
+                    <div className="stat-value">{weather.current.humidity}%</div>
+                    <div className="stat-label">Humidity</div>
+                  </div>
+                  <div className="stat-item">
+                    <div className="stat-icon">👁️</div>
+                    <div className="stat-value">{weather.current.vis_km} km</div>
+                    <div className="stat-label">Visibility</div>
+                  </div>
+                  <div className="stat-item">
+                    <div className="stat-icon">☀️</div>
+                    <div className="stat-value">{weather.current.uv}</div>
+                    <div className="stat-label">UV Index</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Map */}
+              <div id="map" ref={mapRef}></div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<WeatherApp />);
+
+    function tick() {
+      document.getElementById("datetime").innerText = new Date().toLocaleString();
+    }
+    setInterval(tick, 1000);
+    tick();
+  </script>
+</body>
+</html>
